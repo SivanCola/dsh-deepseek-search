@@ -15,6 +15,9 @@
       #   apiKeyEnv: DEEPSEEK_SEARCH_API_KEY
       #   # Inline key, highest priority. Prefer the panel or the credential store.
       #   apiKey: ''
+      #   # When no standalone key is configured, reuse the official DeepSeek key
+      #   # already configured for the model provider. Set false to disable.
+      #   useOfficialKey: true
       #   baseUrl: https://api.deepseek.com
       #   count: 10
       #   needContent: false

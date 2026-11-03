@@ -244,9 +244,15 @@ window.__ModuleLoader__.load({
       'settings.clear': '清除',
       'settings.saved': '已保存',
       'settings.cleared': '已清除',
-      'settings.note': 'Key 通过 Harness 凭证库保存为 {env}，与模型服务商的 Key 彼此独立；只在保存时写入本机，读取后不回显。',
+      'settings.note': '独立 Key 通过 Harness 凭证库保存为 {env}，只在保存时写本机、不回显。没配独立 Key 时，会自动复用你在模型列表里配好的官方 DeepSeek Key。',
       'settings.docs': 'DeepSeek 搜索 API 文档',
       'settings.source': '来源：{source}',
+      'source.own': '独立 Key',
+      'source.official': '模型列表的官方 Key',
+      'source.officialRef': '模型列表的官方 Key（{ref}）',
+      'source.config': '配置文件内联',
+      'source.env': '环境变量',
+      'source.envRef': '环境变量（{ref}）',
       'results.count': '{n} 条结果',
       'results.expand': '展开',
       'results.collapse': '收起',
@@ -294,9 +300,15 @@ window.__ModuleLoader__.load({
       'settings.clear': 'Clear',
       'settings.saved': 'Saved',
       'settings.cleared': 'Cleared',
-      'settings.note': 'The key is stored through the Harness credential store as {env}, separate from your model provider key. It is written only when you save it and is never echoed back.',
+      'settings.note': 'The standalone key is stored through the Harness credential store as {env}; it is written only when you save it and never echoed back. When it is unset, the official DeepSeek key configured for the model provider is reused automatically.',
       'settings.docs': 'DeepSeek Search API docs',
       'settings.source': 'Source: {source}',
+      'source.own': 'standalone key',
+      'source.official': 'official key from the model list',
+      'source.officialRef': 'official key from the model list ({ref})',
+      'source.config': 'inline config',
+      'source.env': 'environment variable',
+      'source.envRef': 'environment variable ({ref})',
       'results.count': '{n} results',
       'results.expand': 'More',
       'results.collapse': 'Less',
@@ -831,13 +843,27 @@ a.dds-hit-title:hover{color:var(--dsw-alias-brand-primary);text-decoration:under
 
     // ------------------------------------------------------------------ settings
 
+    // Friendly, localized label for the Host-reported key origin. The Host sends
+    // a machine kind (own | official | config | env) plus the credential ref that
+    // produced the value; the raw ref name is data, so it interpolates as-is.
+    function sourceLabel(t, status) {
+      if (!status || !status.configured) return ''
+      const kind = typeof status.source === 'string' ? status.source : ''
+      const ref = typeof status.sourceRef === 'string' ? status.sourceRef : ''
+      if (kind === 'own') return t('source.own')
+      if (kind === 'official') return ref ? t('source.officialRef', { ref: ref }) : t('source.official')
+      if (kind === 'config') return t('source.config')
+      if (kind === 'env') return ref ? t('source.envRef', { ref: ref }) : t('source.env')
+      return ''
+    }
+
     function SettingsPanel(props) {
       const t = resolveT(props)
       const status = props.status || null
       const configured = !!(status && status.configured)
       const masked = (status && status.maskedKey) || ''
       const env = (status && status.apiKeyEnv) || ENV_FALLBACK
-      const source = status && status.source ? String(status.source) : ''
+      const source = sourceLabel(t, status)
       const notice = props.notice
       const draft = typeof props.draft === 'string' ? props.draft : ''
       const busy = !!props.busy

@@ -60,20 +60,24 @@ Search syntax supported inside `query` (pass through untouched): `site:`, `-site
 ## 2. File layout (all under `/Users/work/Desktop/code/dsh-deepseek-search/`)
 
 ```
-package.json          (Lead)
-cordis.patch.yml      (Lead)
-locale/en.json        (Lead)  meta.title / meta.description
-locale/zh.json        (Lead)
-icon.svg              (Lead)
-index.js              (host-core)     Host half
-deepseek-api.js       (host-core)     pure DeepSeek HTTP client, no Cordis imports
-test/deepseek-api.test.mjs   (host-core)
-client.js             (client-ui)     Client half
-README.md             (Lead)
+package.json              bundle manifest + dsh.bundle / dsh.client sections
+cordis.patch.yml          the bundle patch row (id: dsh-deepseek-search)
+locale/en.json            meta.title / meta.description for Plugin Manager
+locale/zh.json
+icon.svg
+LICENSE  .gitignore       MIT; ignores node_modules/, .DS_Store, *.log
+index.js                  Host half: tool + 3 Fetch routes + key resolution
+deepseek-api.js           pure DeepSeek HTTP client, no Cordis imports
+official-key.js           pure discovery of the official DeepSeek credential refs
+client.js                 Client half: sidebar.panellist + main panel
+test/deepseek-api.test.mjs  18 cases
+test/official-key.test.mjs  10 cases
+README.md
+SPEC.md                   this contract
 ```
 
-`index.js` imports `./deepseek-api.js` with `import { ... } from './deepseek-api.js'`.
-Both files are ESM (`"type": "module"` in package.json). Plain JavaScript, no TypeScript, no build step,
+`index.js` imports `./deepseek-api.js` and `./official-key.js` with ESM `import`.
+All files are ESM (`"type": "module"` in package.json). Plain JavaScript, no TypeScript, no build step,
 no npm dependencies. Node 22+ / browsers with `fetch`, `AbortSignal.timeout`.
 
 `export` names in `index.js`: `apply`, `inject`. **Do not** export `Config` (no schemastery dependency
@@ -94,6 +98,7 @@ export function apply(ctx, config) { /* ... */ }
 |---|---|---|
 | `apiKey` | `''` | inline key; highest priority, overrides the credential store |
 | `apiKeyEnv` | `'DEEPSEEK_SEARCH_API_KEY'` | credential ref name resolved through `ctx.credentials` |
+| `useOfficialKey` | `true` | when no standalone key resolves, reuse the official DeepSeek key the Harness already holds for the model provider |
 | `baseUrl` | `'https://api.deepseek.com'` | origin, no trailing slash |
 | `count` | `10` | default result count, clamp 1..50 |
 | `needContent` | `false` | default for `need_content` |
@@ -150,16 +155,38 @@ never cache the key across operations. Never log or return the raw key.
 
 ### 3.2 Key resolution (host)
 
+The plugin's own credential always wins; the official key is a fallback so a model whose provider has no
+search capability can search with a key the user already configured for the model list.
+
 ```
 resolveApiKey():
-  1. config.apiKey trimmed, if non-empty        -> { apiKey, source: 'config' }
-  2. ctx.credentials.resolve(config.apiKeyEnv)   -> { apiKey, source: 'credentials' } when value non-empty
-  3. process.env[config.apiKeyEnv] (if defined)  -> { apiKey, source: 'env' }
+  1. config.apiKey trimmed, if non-empty             -> { apiKey, source: 'config',      ref: null }
+  2. ctx.credentials.resolve(config.apiKeyEnv)        -> { apiKey, source: 'credentials', ref: apiKeyEnv }
+  3. officialRefs() in order (when useOfficialKey)    -> { apiKey, source: 'official',    ref }
+     ctx.credentials.resolve(ref) for the first ref with a non-empty value
+  4. process.env[config.apiKeyEnv], then process.env
+     for each of FALLBACK_OFFICIAL_REFS (DEEPSEEK_API_KEY) -> { apiKey, source: 'env', ref }
   else null
 ```
 
-Add `maskKey(key)` → `sk-abc…8f2c` style (keep first 6 and last 4, mask the middle; never return the raw key
-over HTTP; the inline `config.apiKey` is likewise never echoed).
+`officialRefs()` (see `official-key.js`) builds the candidate refs, ordered:
+
+1. settings namespaces of providers whose `provider === 'deepseek-official'`
+   (`ctx.llm.listConfigurableProviders()` → `settingsNs`);
+2. the known namespace list `llm-deepseek`, `web-deepseek-api`, `web-search-deepseek`;
+3. the shipped default ref name `DEEPSEEK_API_KEY`.
+
+For each namespace it reads `value.apiKeyEnv` from `ctx.settings.describe({ redactSecrets: true })`.
+The plugin's own ref is excluded so it is never reported as an "official" source.
+
+The official provider's `baseURL` is **not** adopted: it is frequently a local or corporate proxy that does
+not implement `/v1/tools/search`. Interface address changes belong in `baseUrl`.
+
+`maskKey(key)` → `sk-abc…8f2c` style (keep first 6 and last 4, mask the middle). The raw key never crosses
+HTTP, and only the credential **ref name** (e.g. `DEEPSEEK_API_KEY`) is ever reported.
+
+A rejected key must name the ref that actually produced the request — see `keyOriginHint()`; otherwise a
+failure on the official key would send the user to a panel field they never filled.
 
 ### 3.3 Registered tool
 
@@ -211,11 +238,18 @@ Every response is JSON with `cache-control: no-store`.
 **`/api/dsh-deepseek-search/status`** → 200
 ```json
 { "ok": true, "value": {
-    "configured": true, "source": "credentials", "maskedKey": "sk-abc…8f2c",
-    "apiKeyEnv": "DEEPSEEK_SEARCH_API_KEY", "baseUrl": "https://api.deepseek.com",
+    "configured": true, "source": "official", "sourceRef": "DEEPSEEK_API_KEY",
+    "maskedKey": "sk-abc…8f2c",
+    "apiKeyEnv": "DEEPSEEK_SEARCH_API_KEY",
+    "official": { "enabled": true, "candidates": ["DEEPSEEK_API_KEY"] },
+    "baseUrl": "https://api.deepseek.com",
     "toolName": "deepseek_search",
     "defaults": { "count": 10, "needContent": false } } }
 ```
+
+`source` is `"own" | "official" | "config" | "env" | null` (the machine kind the client localizes);
+`sourceRef` is the credential ref that produced the value, and is safe to show. `official.candidates`
+lists ref **names** only, never values.
 
 **`/api/dsh-deepseek-search/search`** body
 ```json

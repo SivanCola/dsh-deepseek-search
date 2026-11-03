@@ -55,15 +55,46 @@ git clone https://github.com/SivanCola/dsh-deepseek-search.git
 
 ---
 
-## 2. 配 Key（三选一，优先级从高到低）
+## 2. Key 从哪来（四级回退，前两级就够了）
 
-### 方式 A：面板里填（推荐）
+每次调用都重新解析，所以下面任何一处改动，**下一次调用立刻生效**，不用重启。优先级从高到低：
+
+| 级别 | 来源 | 面板上显示 |
+|---|---|---|
+| 1 | `config.apiKey`（明文内联，仅调试用） | 配置文件内联 |
+| 2 | **独立 Key**：Harness 凭证库里的 `DEEPSEEK_SEARCH_API_KEY` | 独立 Key |
+| 3 | **官方 Key 自动复用**：你模型列表里配好的 DeepSeek Key（见下） | 模型列表的官方 Key（`DEEPSEEK_API_KEY`） |
+| 4 | 环境变量 `DEEPSEEK_SEARCH_API_KEY` / `DEEPSEEK_API_KEY` | 环境变量 |
+
+### 方式 0：什么都不配 —— 自动复用官方 Key（默认开）
+
+插件会自己去读你已经在 Harness 里配好的 DeepSeek Key：
+
+1. 问 `ctx.llm.listConfigurableProviders()` 要 provider 目录，挑出 `deepseek-official`；
+2. 用 `ctx.settings.describe()` 读出这些 provider 命名空间（`llm-deepseek` /
+   `web-deepseek-api` / `web-search-deepseek`）里的 `apiKeyEnv`；
+3. 逐个走 `ctx.credentials.resolve()`，取第一个有值的；最后兜底 `DEEPSEEK_API_KEY`。
+
+也就是说：**只要你模型列表里那个官方 DeepSeek 能用，这个插件的搜索就已经能用了**，不用再填一次 Key。
+面板会显示「来源：模型列表的官方 Key（DEEPSEEK_API_KEY）」，可以直接看到复用的是哪一个凭证名。
+
+关掉这个行为：
+
+```yaml
+config:
+  useOfficialKey: false
+```
+
+> ⚠️ 只复用**Key**，不跟随官方 provider 的 `baseURL`。因为那个 baseURL 常常是本地/公司代理，
+> 未必实现了 `/v1/tools/search`。要换接口地址请显式配 `baseUrl`。
+
+### 方式 A：面板里填独立 Key（想要独立计费/换账号时就填）
 
 点左侧栏的放大镜 → 右上角滑杆图标 → 密码框粘贴 `sk-...` → **保存**。状态从「未配置」变「已配置」，
-并显示脱敏后的 `sk-abc…8f2c` 与来源 `credentials`。
+并显示脱敏后的 `sk-abc…8f2c` 与来源。
 
-Key 存进 **Harness 凭证库**，凭证名（credential ref）为 `DEEPSEEK_SEARCH_API_KEY`，和你模型服务商的
-Key 是两套东西，互不影响。保存时写入本机，读回时不会回显原文。
+Key 存进 **Harness 凭证库**，凭证名（credential ref）为 `DEEPSEEK_SEARCH_API_KEY`。填了就优先用它，
+不会再动官方 Key —— 适合"搜索走另一个账号/额度"的场景。保存时写入本机，读回时不会回显原文。
 
 ### 方式 B：环境变量
 
@@ -71,7 +102,7 @@ Key 是两套东西，互不影响。保存时写入本机，读回时不会回�
 export DEEPSEEK_SEARCH_API_KEY=sk-xxxx        # 然后重启 DSH
 ```
 
-凭证服务会先查凭证库，再查进程环境 / `.env`，所以 A、B 两种方式共存时以 A 为准。
+凭证服务会先查凭证库，再查进程环境 / `.env`，所以 A、B 共存时以 A 为准。
 
 ### 方式 C：写进插件 config
 
@@ -140,14 +171,15 @@ config:
 ## 5. 实现结构
 
 ```
-index.js          Host 半边：Cordis 插件，注册工具 + 3 个 POST 路由
+index.js          Host 半边：Cordis 插件，注册工具 + 3 个 POST 路由 + Key 四级解析
 deepseek-api.js   纯函数 DeepSeek Search 客户端（无依赖，可单测）
+official-key.js   纯函数：从 provider 目录 + settings 命名空间推导官方 Key 的凭证名
 client.js         浏览器半边：sidebar.panellist 图标 + main 面板
 locale/en.json    Plugins 页显示用的标题/描述
 locale/zh.json
 icon.svg
 cordis.patch.yml  bundle patch，插入 id=dsh-deepseek-search 的 row
-test/             node:test 单测（18 例，注入 fetchImpl，零联网）
+test/             node:test 单测（28 例，注入 fetchImpl，零联网）
 SPEC.md           实现契约（服务签名、接口形状、错误码）
 ```
 
@@ -177,20 +209,37 @@ Host 提供、面板调用的路由（都是 `POST`，`cache-control: no-store`�
 
 ```bash
 cd /Users/work/Desktop/code/dsh-deepseek-search
-node --test test/*.test.mjs      # 18 passed
+node --test test/*.test.mjs      # 28 passed（API 客户端 18 + 官方 Key 识别 10）
 ```
 
 > Node 26 起 `node --test test/` 不再展开目录参数，用上面的 glob 形式（`npm test` 已内置）。
 
 ---
 
-## 7. 已知限制
+## 7. 排错
+
+| 现象 | 原因 | 处理 |
+|---|---|---|
+| 提示 `HTTP 401: Authentication Fails ... ****534e is invalid`，并指出用的是「model provider settings 里的 DEEPSEEK_API_KEY」 | 自动复用到的官方 Key 已失效/被轮换 | 在模型列表里更新那把 Key，或在面板里填一把独立 Key（填了就不再动官方 Key） |
+| 同上但指向「standalone key」 | 面板里那把 Key 无效 | 重新在面板保存 |
+| `HTTP 402` | 那把 Key 所属账号余额不足 | 充值或换一把 |
+| `HTTP 429` | 超过账号 QPS（Search 100/s） | 稍等重试，或减小 `count` |
+| 提示「deepseek_search 未配置 Key」 | 既没有独立 Key，也没识别到官方 DeepSeek Key | 面板填一把，或确认模型列表里配的是 `deepseek-official` provider |
+
+> 401 / 402 的提示会**明确点名实际用到的那把 Key**（例如 `DEEPSEEK_API_KEY` 还是 `DEEPSEEK_SEARCH_API_KEY`），
+> 避免"明明没配独立 Key，却让你去面板改"的误解。
+
+---
+
+## 8. 已知限制
 
 - 搜索/抓取按请求计费（DeepSeek 官方：每 1000 次成功请求 5 元，失败或空结果不计费）。
 - QPS 按账号限：Search 100 QPS、Fetch 25 QPS，超限返回 429（面板会提示「稍等重试」）。
 - 网页内容仍受目标站点可用性影响，`need_content` 也可能拿到空正文。
-- 未验证项：需要真实 Key 才能验证的「真实联网搜索往返」；以及面板在你的主题下的最终视觉呈现。
-  安装与注册层面已确认（左侧栏 entry 已 active、`main` 面板已注册、`deepseek_search` 已进入工具表）。
+- 自动复用的只是官方 provider 的 **Key**，不跟随它的 `baseURL`；换接口地址请显式配 `baseUrl`。
+- 需要真实有效 Key 才能验证的「有结果返回」这一步，取决于你账号的 Key 状态；插件侧的网络/鉴权链路已用真实
+  请求验证过（能收到 DeepSeek 的 `request_id` 与业务错误码）。
+- 面板在你当前主题下的最终视觉呈现未做像素级核验。
 
 ---
 

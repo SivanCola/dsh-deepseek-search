@@ -1,6 +1,6 @@
 {
   "name": "@local/dsh-deepseek-search",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "DeepSeek Search for DeepSeek Harness: a left-sidebar search panel plus a deepseek_search tool for every model, backed by the standalone DeepSeek Search API and its own API key.",
   "author": "SivanCola (https://github.com/SivanCola)",
@@ -36,6 +36,7 @@
   "files": [
     "index.js",
     "deepseek-api.js",
+    "official-key.js",
     "client.js",
     "cordis.patch.yml",
     "locale/*.json",
@@ -43,11 +44,15 @@
     "README.md"
   ],
   "dsh": {
-    "bundle": { "patch": "./cordis.patch.yml" },
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
     "client": {
       "platform": "web",
       "immediately": true,
-      "inject": ["@deepseek-ai/dsh-client-ui-conversation"]
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ]
     }
   }
 }
