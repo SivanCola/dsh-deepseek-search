@@ -1,0 +1,208 @@
+# DeepSeek 搜索 · `@local/dsh-deepseek-search`
+
+一个带**左侧栏入口**的 DeepSeek Harness 插件：用**独立的 DeepSeek API Key** 调用
+[DeepSeek 官方 Search 接口](https://api-docs.deepseek.com/zh-cn/guides/search) 做网页搜索。
+
+两半组成：
+
+| 半边 | 作用 |
+|---|---|
+| **浏览器半边** | 左侧栏新增一个放大镜入口，点开是主栏里的完整搜索页：关键词、结果条数、正文抓取开关、结果卡片、Key 配置。 |
+| **Host 半边** | 注册模型工具 `deepseek_search`，配置内的**任意模型 / 任意会话**都能直接调用；同时提供搜索页用的三个 HTTP 路由。 |
+
+关键点：搜索走的是**本插件自己的 DeepSeek Key**，和当前对话所用模型的服务商（DeepSeek / Anthropic /
+OpenAI 兼容 / 本地模型 …）完全无关。所以即使你用的是别的模型，也能用 `deepseek_search` 联网。
+
+---
+
+## 1. 已经安装好了
+
+本插件已通过 `plugin_manager` 装进 `desktop` profile 并激活：
+
+- 左侧栏第 4 个图标（在 Plugins / Schedules / Context 之后）→ **DeepSeek 搜索**
+- 工具 `deepseek_search` 已对全部 agent 可见
+
+装到了哪里：
+
+```
+/Users/work/Desktop/code/dsh-deepseek-search          # 源码（link 方式安装，改完即生效）
+~/.dsh/profiles/desktop/package.json                  # dsh.profile.bundles 里多了 @local/dsh-deepseek-search
+```
+
+重新安装 / 卸载：
+
+```bash
+# 卸载后重装（改了 package.json 或 cordis.patch.yml 时需要）
+#   在 DSH 里：plugin_manager action=remove_bundle target=@local/dsh-deepseek-search
+#   然后：    plugin_manager action=install_bundle target=/Users/work/Desktop/code/dsh-deepseek-search
+```
+
+> 只改 `index.js` / `client.js` 的**代码**时，先 `set_bundle enabled=false` 再 `enabled=true` 即可热激活；
+> 改 `package.json` / `cordis.patch.yml` / `locale/*` 需要 remove + install，必要时重启 App。
+
+### 换台机器：直接从 GitHub 装
+
+```
+plugin_manager action=install_bundle target=https://github.com/SivanCola/dsh-deepseek-search
+```
+
+也可以先 clone 再指向目录（本地目录是 link 安装，改完代码热激活即可）：
+
+```bash
+git clone https://github.com/SivanCola/dsh-deepseek-search.git
+# plugin_manager action=install_bundle target=<clone 出来的目录>
+```
+
+---
+
+## 2. 配 Key（三选一，优先级从高到低）
+
+### 方式 A：面板里填（推荐）
+
+点左侧栏的放大镜 → 右上角滑杆图标 → 密码框粘贴 `sk-...` → **保存**。状态从「未配置」变「已配置」，
+并显示脱敏后的 `sk-abc…8f2c` 与来源 `credentials`。
+
+Key 存进 **Harness 凭证库**，凭证名（credential ref）为 `DEEPSEEK_SEARCH_API_KEY`，和你模型服务商的
+Key 是两套东西，互不影响。保存时写入本机，读回时不会回显原文。
+
+### 方式 B：环境变量
+
+```bash
+export DEEPSEEK_SEARCH_API_KEY=sk-xxxx        # 然后重启 DSH
+```
+
+凭证服务会先查凭证库，再查进程环境 / `.env`，所以 A、B 两种方式共存时以 A 为准。
+
+### 方式 C：写进插件 config
+
+编辑 `~/.dsh/profiles/desktop/cordis.patch.yml` 中该 bundle 的 `config`（或在
+`dsh-deepseek-search/cordis.patch.yml` 里取消注释），然后重装：
+
+```yaml
+config:
+  apiKey: sk-xxxx        # 明文，优先级最高，仅适合临时调试
+```
+
+---
+
+## 3. 用工具：`deepseek_search`
+
+任何模型都能调，参数：
+
+| 参数 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `query` | string | 是 | 1–128 字符，不是全空白，支持下面的搜索语法 |
+| `count` | integer | 否 | 1–50，默认 10 |
+| `need_content` | boolean | 否 | true 时在 `content` 返回网页正文（更慢更大） |
+| `ori_question` | string | 否 | 用户的原始问题，帮助理解搜索意图 |
+
+`query` 里可以直接用 DeepSeek 的搜索语法（原样透传）：
+
+| 语法 | 例子 | 说明 |
+|---|---|---|
+| `site:` | `DeepSeek site:github.com` | 限定站点，多个用 ` OR ` 连 |
+| `-site:` | `DeepSeek -site:example.com` | 排除站点 |
+| `-` / `-"…"` | `DeepSeek -广告`、`-"release notes"` | 排除词 / 排除短语 |
+| `"…"` | `DeepSeek "精确短语"` | 精确匹配 |
+| `lang:` | `DeepSeek lang:zh,en` | 限定语言 |
+| `after:` / `before:` | `DeepSeek after:2025-01-01` | 限定发布时间 |
+
+返回给模型的是紧凑文本（标题 / URL / 摘要），结构化结果是：
+
+```json
+{ "query": "…", "count": 10, "elapsedMs": 412,
+  "results": [{ "title": "…", "url": "…", "snippet": "…", "summary": "…",
+                "content": "", "siteName": "…", "siteIcon": "…",
+                "date": "2026-06-01T00:00:00+00:00",
+                "rerankScore": 2.4, "authority": 3 }] }
+```
+
+`authority`: -1 未知，0–4，「3 及以上」表示极权威；`rerankScore >= 1.5` 为优质结果（面板会给徽章）。
+
+---
+
+## 4. 可选配置项
+
+`cordis.patch.yml` 的 `config` 全部可省略：
+
+| 键 | 默认 | 说明 |
+|---|---|---|
+| `apiKey` | `''` | 明文 Key，优先级最高 |
+| `apiKeyEnv` | `DEEPSEEK_SEARCH_API_KEY` | 凭证名 / 环境变量名 |
+| `baseUrl` | `https://api.deepseek.com` | 接口 origin |
+| `count` | `10` | 默认条数 1–50 |
+| `needContent` | `false` | 默认是否抓正文 |
+| `timeoutMs` | `25000` | 单次请求超时 |
+| `toolName` | `deepseek_search` | 工具名，改名可避免和别的插件撞名 |
+
+---
+
+## 5. 实现结构
+
+```
+index.js          Host 半边：Cordis 插件，注册工具 + 3 个 POST 路由
+deepseek-api.js   纯函数 DeepSeek Search 客户端（无依赖，可单测）
+client.js         浏览器半边：sidebar.panellist 图标 + main 面板
+locale/en.json    Plugins 页显示用的标题/描述
+locale/zh.json
+icon.svg
+cordis.patch.yml  bundle patch，插入 id=dsh-deepseek-search 的 row
+test/             node:test 单测（18 例，注入 fetchImpl，零联网）
+SPEC.md           实现契约（服务签名、接口形状、错误码）
+```
+
+Host 提供、面板调用的路由（都是 `POST`，`cache-control: no-store`）：
+
+| 路径 | 作用 |
+|---|---|
+| `/api/dsh-deepseek-search/status` | 是否已配置、脱敏 Key、来源、默认值 |
+| `/api/dsh-deepseek-search/search` | 代理搜索，返回 `{ok:true,value:{…}}` 或 `{ok:false,error:{code,message}}` |
+| `/api/dsh-deepseek-search/key` | 保存 / 清除凭证（`{apiKey:""}` 即清除） |
+
+所有响应统一 `{ ok, value | error }`，错误码 `MISSING_API_KEY`、`UNAUTHORIZED`、`INSUFFICIENT_BALANCE`、
+`FORBIDDEN`、`NOT_FOUND`、`TIMEOUT`、`RATE_LIMITED`、`BAD_REQUEST`、`NETWORK_ERROR`、`SERVER_ERROR`、
+`BAD_RESPONSE`、`INTERNAL` —— 面板对每个码都有中英文提示。
+
+设计取舍：
+
+- **不接管 `ctx.web` 的 `searchProvider`。** 直接注册搜索 provider 会让 `web` 服务的
+  「无配置 + 多个可用 provider → 模糊」判定被触发，可能打断你现有的 `web_search`。本插件改用
+  独立工具 + 独立路由，零干扰。
+- **Key 只留在 Host。** 浏览器永远只拿到脱敏串；搜索在 Host 侧发起，Key 不进前端、不进 localStorage。
+- **每次调用现取 Key。** 不做缓存，所以在面板里换 Key 后下一次调用立刻生效，无需重启。
+
+---
+
+## 6. 测试
+
+```bash
+cd /Users/work/Desktop/code/dsh-deepseek-search
+node --test test/*.test.mjs      # 18 passed
+```
+
+> Node 26 起 `node --test test/` 不再展开目录参数，用上面的 glob 形式（`npm test` 已内置）。
+
+---
+
+## 7. 已知限制
+
+- 搜索/抓取按请求计费（DeepSeek 官方：每 1000 次成功请求 5 元，失败或空结果不计费）。
+- QPS 按账号限：Search 100 QPS、Fetch 25 QPS，超限返回 429（面板会提示「稍等重试」）。
+- 网页内容仍受目标站点可用性影响，`need_content` 也可能拿到空正文。
+- 未验证项：需要真实 Key 才能验证的「真实联网搜索往返」；以及面板在你的主题下的最终视觉呈现。
+  安装与注册层面已确认（左侧栏 entry 已 active、`main` 面板已注册、`deepseek_search` 已进入工具表）。
+
+---
+
+## 8. English summary
+
+`@local/dsh-deepseek-search` adds (a) a left-sidebar **DeepSeek Search** page and (b) a `deepseek_search`
+tool available to **every** model in the profile. Both use the DeepSeek Search API
+(`POST https://api.deepseek.com/v1/tools/search`) with the plugin's **own** API key, resolved per call
+from an inline config value, the Harness credential store (`DEEPSEEK_SEARCH_API_KEY`) or the environment —
+never from the model provider's key, and never sent to the browser. The plugin deliberately does **not**
+register itself as the `ctx.web` search provider, so it cannot disturb an existing `web_search` setup.
+
+---
+
+[![](https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "DeepSeek 搜索（独立密钥）",
+    "description": "使用独立 DeepSeek API Key 的网页搜索。在左侧栏增加 DeepSeek 搜索面板，并注册 deepseek_search 工具，配置内的任意模型都能直接调用，与模型所走的服务商无关。"
+  }
+}

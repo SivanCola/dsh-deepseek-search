@@ -1,0 +1,22 @@
+# Bundle patch layer.
+#
+# Two halves in one row: the row loads this package's main entry as the Host
+# half (a plain Cordis plugin that registers the `deepseek_search` tool and the
+# browser Fetch routes), and the `dsh.client` declaration in package.json makes
+# the Web app load `./client` as the browser half (the left-sidebar panel).
+#
+# The plugin needs no mandatory config. To tune it, uncomment and edit the
+# `config` block below; it is merged into the row's config as-is.
+- insert:
+    - id: dsh-deepseek-search
+      name: '@local/dsh-deepseek-search'
+      # config:
+      #   # Credential-ref name resolved through the Harness credential store.
+      #   apiKeyEnv: DEEPSEEK_SEARCH_API_KEY
+      #   # Inline key, highest priority. Prefer the panel or the credential store.
+      #   apiKey: ''
+      #   baseUrl: https://api.deepseek.com
+      #   count: 10
+      #   needContent: false
+      #   timeoutMs: 25000
+      #   toolName: deepseek_search

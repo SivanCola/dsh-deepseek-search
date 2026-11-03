@@ -1,0 +1,53 @@
+{
+  "name": "@local/dsh-deepseek-search",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DeepSeek Search for DeepSeek Harness: a left-sidebar search panel plus a deepseek_search tool for every model, backed by the standalone DeepSeek Search API and its own API key.",
+  "author": "SivanCola (https://github.com/SivanCola)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SivanCola/dsh-deepseek-search.git"
+  },
+  "homepage": "https://github.com/SivanCola/dsh-deepseek-search",
+  "bugs": {
+    "url": "https://github.com/SivanCola/dsh-deepseek-search/issues"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh-plugin",
+    "deepseek",
+    "web-search",
+    "cordis",
+    "ai-agent"
+  ],
+  "type": "module",
+  "icon": "icon.svg",
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "deepseek-api.js",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md"
+  ],
+  "dsh": {
+    "bundle": { "patch": "./cordis.patch.yml" },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": ["@deepseek-ai/dsh-client-ui-conversation"]
+    }
+  }
+}

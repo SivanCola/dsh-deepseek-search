@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "DeepSeek Search (standalone key)",
+    "description": "Web search through the DeepSeek Search API with its own API key. Adds a DeepSeek search panel to the left sidebar and a deepseek_search tool that every model in the profile can call, independently of which provider serves the model."
+  }
+}
