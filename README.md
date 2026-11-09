@@ -247,6 +247,65 @@ node --test test/*.test.mjs      # 28 passed（API 客户端 18 + 官方 Key 识
 
 ---
 
+## 6.5 发版（GitHub Actions 自动发 npm）
+
+发版不再手敲 `npm publish`，由 [`.github/workflows/publish-npm.yml`](.github/workflows/publish-npm.yml) 完成。
+鉴权走 npm 的 **OIDC trusted publishing**：GitHub 给本次 workflow 签发一个短时 token，
+npm 校验「仓库 + workflow 文件名」后授予发布权。所以仓库里**没有任何 NPM_TOKEN**，
+也没有会过期的长期凭据，`--provenance` 自动附带。
+
+### 一次性准备（每个新包名都要做一次）
+
+包名必须先在 npm 上存在——trusted publisher 只能给已有包授权，不能创建包。0.2.0 已存在，满足。
+
+```bash
+npm trust github @sivancola/dsh-deepseek-search \
+  --file publish-npm.yml \
+  --repo SivanCola/dsh-deepseek-search \
+  --allow-publish
+```
+
+这条命令要 2FA，所以只能人来做。也可以在 npmjs.com → 该包 → Settings → Trusted Publisher 里点选。
+做完之后可以用下面的「只校验」模式确认，不需要真的发一版。
+
+### 发一版
+
+```bash
+# 1. 改版本号并提交
+npm version 0.3.0 --no-git-tag-version
+git commit -am "chore: release 0.3.0" && git push
+
+# 2. 打 tag 建 Release，workflow 自动发布
+gh release create v0.3.0 --generate-notes
+```
+
+也可以在 Actions 页手动 `Run workflow`，填 `version`（必须等于 `package.json` 的 version）。
+手动触发只允许从 `main` 跑。
+
+### 只想确认配置对不对
+
+```bash
+gh workflow run publish-npm.yml -f version=0.3.0 -f verify_only=true
+```
+
+`verify_only` 会走到「确认 trusted publisher 已登记」这一步就停：拿 GitHub 的 id_token 去
+`registry.npmjs.org/-/npm/v1/oidc/token/exchange/package/...` 换一个发布 token，换到了说明信任关系
+确实登记过，然后跳过 `npm publish`。换票失败会直接报 HTTP 状态码和该执行的命令。
+
+### workflow 里做对的几件事
+
+| 环节 | 为什么 |
+|---|---|
+| 不设 `setup-node` 的 `registry-url` | 设了会在 `~/.npmrc` 写一行空的 `_authToken`，干扰 OIDC 换票 |
+| 显式升级 `npm@^11.15` | Node 22 自带 npm 10 不认识 OIDC；`npm trust` 也要 11.15+ |
+| 拒绝残留 `NODE_AUTH_TOKEN` | 有它就会绕过 OIDC，发布就变回长期凭据 |
+| 版本号与 tag 必须一致 | 防止 tag 打了但 `package.json` 没改，发出去的是旧版本号 |
+| 已发布则跳过 | 重跑幂等，不会因为 CDN 延迟或点错按钮而失败 |
+| 复核时重试 10 分钟 | packument 有约 3 分钟 CDN 延迟，直接 `npm view` 会误判失败 |
+| 校验 provenance 存在 | 用 OIDC 却没产出 attestation 说明配置漏了，当失败处理 |
+
+---
+
 ## 7. 排错
 
 | 现象 | 原因 | 处理 |
