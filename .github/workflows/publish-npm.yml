@@ -145,8 +145,6 @@ jobs:
       - name: 确认 trusted publisher 已登记
         id: trust
         if: ${{ inputs.verify_only || steps.check.outputs.exists == 'false' }}
-        env:
-          VERSION: ${{ steps.ver.outputs.version }}
         run: |
           set -euo pipefail
           # npm 发布前会拿 GitHub 的 id_token 去这个端点换一个短时发布 token。
