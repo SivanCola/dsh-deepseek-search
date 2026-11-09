@@ -45,6 +45,16 @@ jobs:
         with:
           ref: ${{ github.event.release.tag_name || github.ref }}
 
+      # 手动触发只允许从 main 发，避免在临时分支上误发一版。
+      - name: 手动触发必须走 main
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
+            echo "::error::手动发布只能在 main 分支上跑，当前是 ${GITHUB_REF}。"
+            exit 1
+          fi
+
       # 刻意不设 registry-url：setup-node 会因此在 ~/.npmrc 里写一行
       # `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}`，而在 trusted
       # publishing 下这个变量是空的，残留的空 token 会干扰 OIDC 换票。
@@ -70,6 +80,28 @@ jobs:
             echo "::error::$HOME/.npmrc 里有 _authToken，会干扰 trusted publishing。"
             exit 1
           fi
+
+      # 真正换票发生在 npm publish 内部。这里先把 GitHub 的 OIDC 端点打一遍，
+      # 把「permissions 写漏」这类问题提前暴露成一句明确的话，
+      # 而不是等到发布时报一个看不懂的 ENEEDAUTH。
+      - name: 确认 OIDC 可用
+        run: |
+          set -euo pipefail
+          if [[ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]]; then
+            echo "::error::拿不到 ACTIONS_ID_TOKEN_REQUEST_URL：permissions.id-token 没写 write，或仓库策略禁用了 OIDC。"
+            exit 1
+          fi
+          code="$(curl -s -o /tmp/oidc.json -w '%{http_code}' \
+            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=npm:registry.npmjs.org")"
+          if [[ "$code" != "200" ]]; then
+            echo "::error::GitHub OIDC 端点返回 HTTP ${code}，取不到 npm 用的 token。"
+            cat /tmp/oidc.json || true
+            exit 1
+          fi
+          # 只校验能拿到 token，绝不把 token 内容打出来。
+          node -p "'OIDC 可用，token 长度 ' + JSON.parse(require('fs').readFileSync('/tmp/oidc.json','utf8')).value.length"
+          rm -f /tmp/oidc.json
 
       - name: 解析并校验版本
         id: ver
@@ -149,6 +181,7 @@ jobs:
       # 上一轮手工发布踩过：packument 有约 3 分钟 CDN 延迟，
       # dist-tags 端点先可见，直接 npm view 会误判失败。这里重试而不是立刻报错。
       - name: 复核 registry
+        if: steps.check.outputs.exists == 'false'
         env:
           VERSION: ${{ steps.ver.outputs.version }}
         run: |
@@ -158,8 +191,15 @@ jobs:
             if [[ "$got" == "$VERSION" ]]; then
               echo "::notice::registry 已可见 ${PACKAGE_NAME}@${VERSION}"
               npm view "$PACKAGE_NAME" dist-tags --json || true
-              npm view "${PACKAGE_NAME}@${VERSION}" dist.attestations --json || \
-                echo "::warning::没查到 attestations；若发布成功但无 provenance，检查 id-token 权限。"
+              # provenance 是这次改造的主要收益，缺失要当失败处理，
+              # 否则「用 OIDC 却没产出 attestation」会被静默放过。
+              att="$(npm view "${PACKAGE_NAME}@${VERSION}" dist.attestations --json 2>/dev/null || true)"
+              if [[ "$att" == *"url"* ]]; then
+                echo "::notice::provenance attestation 已生成"
+              else
+                echo "::error::发布成功但没有 provenance attestation；检查 permissions.id-token 与 npm 版本。"
+                exit 1
+              fi
               exit 0
             fi
             echo "第 ${i}/30 次：registry 还看不到 ${VERSION}，等 20 秒…"
