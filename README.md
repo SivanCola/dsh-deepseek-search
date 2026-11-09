@@ -40,7 +40,17 @@ OpenAI 兼容 / 本地模型 …）完全无关。所以即使你用的是别的
 > 只改 `index.js` / `client.js` 的**代码**时，先 `set_bundle enabled=false` 再 `enabled=true` 即可热激活；
 > 改 `package.json` / `cordis.patch.yml` / `locale/*` 需要 remove + install，必要时重启 App。
 
-### 换台机器：直接从 GitHub 装
+### 换台机器：从 npm 装（推荐）
+
+已发布到 npm，包名 `@sivancola/dsh-deepseek-search`：
+
+```
+plugin_manager action=install_bundle target=@sivancola/dsh-deepseek-search
+```
+
+指定版本也可以：`target=@sivancola/dsh-deepseek-search@0.2.0`。
+
+### 或者从 GitHub 装
 
 ```
 plugin_manager action=install_bundle target=https://github.com/SivanCola/dsh-deepseek-search
