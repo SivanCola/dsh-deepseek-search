@@ -69,17 +69,17 @@ git clone https://github.com/SivanCola/dsh-deepseek-search.git
 只把 Host 返回的数据换成了示例内容：
 
 <p>
-  <img src="assets/screenshot-3-idle.png" width="360" alt="搜索前">
-  <img src="assets/screenshot-1-results-dark.png" width="360" alt="搜索结果（深色）">
+  <img src="https://raw.githubusercontent.com/SivanCola/dsh-deepseek-search/main/assets/screenshot-3-idle.png" width="360" alt="搜索前">
+  <img src="https://raw.githubusercontent.com/SivanCola/dsh-deepseek-search/main/assets/screenshot-1-results-dark.png" width="360" alt="搜索结果（深色）">
 </p>
 <p>
-  <img src="assets/screenshot-2-results-light.png" width="360" alt="搜索结果（浅色）">
-  <img src="assets/screenshot-4-settings.png" width="360" alt="设置面板">
+  <img src="https://raw.githubusercontent.com/SivanCola/dsh-deepseek-search/main/assets/screenshot-2-results-light.png" width="360" alt="搜索结果（浅色）">
+  <img src="https://raw.githubusercontent.com/SivanCola/dsh-deepseek-search/main/assets/screenshot-4-settings.png" width="360" alt="设置面板">
 </p>
 
 错误态（这里以余额不足为例）：
 
-<img src="assets/screenshot-5-error.png" width="720" alt="错误态">
+<img src="https://raw.githubusercontent.com/SivanCola/dsh-deepseek-search/main/assets/screenshot-5-error.png" width="720" alt="错误态">
 
 > 截图里的结果条目是为了展示排版而编的示例数据，不是真实搜索结果。
 > 这几张图的路径也登记在仓库根目录的 [`screenshots.json`](screenshots.json) 里，插件市场会优先读它。
