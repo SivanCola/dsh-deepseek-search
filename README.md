@@ -63,6 +63,26 @@ git clone https://github.com/SivanCola/dsh-deepseek-search.git
 # plugin_manager action=install_bundle target=<clone 出来的目录>
 ```
 
+### 界面预览
+
+下面几张图是把本插件的**真实前端组件代码**（`client.js` 的 `SearchPage`）在浏览器里渲染后截的图，
+只把 Host 返回的数据换成了示例内容：
+
+| 搜索前 | 搜索结果（深色） |
+|---|---|
+| ![](assets/screenshot-3-idle.png) | ![](assets/screenshot-1-results-dark.png) |
+
+| 搜索结果（浅色） | 设置面板 |
+|---|---|
+| ![](assets/screenshot-2-results-light.png) | ![](assets/screenshot-4-settings.png) |
+
+错误态（这里以余额不足为例）：
+
+![](assets/screenshot-5-error.png)
+
+> 截图里的结果条目是为了展示排版而编的示例数据，不是真实搜索结果。
+> 这几张图的路径也登记在仓库根目录的 [`screenshots.json`](screenshots.json) 里，插件市场会优先读它。
+
 ---
 
 ## 2. Key 从哪来（四级回退，前两级就够了）
