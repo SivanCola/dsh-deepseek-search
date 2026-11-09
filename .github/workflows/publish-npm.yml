@@ -1,0 +1,179 @@
+name: Publish npm
+
+# 发布由 Git tag / GitHub Release 驱动，不再手工 npm publish。
+#
+# 鉴权用 npm 的 OIDC trusted publishing：GitHub 给本次 workflow 签发一个短时
+# token，npm 校验「仓库 + workflow 文件名」后授予发布权。所以这里
+# **没有任何 NPM_TOKEN**，也没有会过期的长期凭据，--provenance 会自动附带。
+#
+# 一次性前提（包名必须先在 npm 上存在，0.2.0 已满足）：
+#   npm trust github @sivancola/dsh-deepseek-search \
+#     --file publish-npm.yml --repo SivanCola/dsh-deepseek-search --allow-publish
+# 或在 npmjs.com → 该包 → Settings → Trusted Publisher 里点选。
+#
+# 发布方式：
+#   1. 改 package.json 的 version 并提交
+#   2. 打 tag（v0.3.0）→ 建 GitHub Release → 本 workflow 自动发布
+#   或者 Actions 页手动 Run workflow 并填 version（会校验与 package.json 一致）
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 要发布的版本号，必须等于 package.json 的 version
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write # OIDC trusted publishing 必需；缺了它 npm 会退回要 token
+
+concurrency:
+  group: publish-npm-${{ github.event.release.tag_name || inputs.version }}
+  cancel-in-progress: false
+
+env:
+  PACKAGE_NAME: '@sivancola/dsh-deepseek-search'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || github.ref }}
+
+      # 刻意不设 registry-url：setup-node 会因此在 ~/.npmrc 里写一行
+      # `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}`，而在 trusted
+      # publishing 下这个变量是空的，残留的空 token 会干扰 OIDC 换票。
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Node 22 自带的 npm 10 不认识 OIDC，必须升级。
+      # trusted publishing 要求 npm >= 11.5.1；11.15+ 才有 npm trust 子命令。
+      - name: 升级 npm
+        run: |
+          npm install --global npm@^11.15.0
+          npm --version
+
+      - name: 确认没有残留 token
+        run: |
+          set -euo pipefail
+          if [[ -n "${NODE_AUTH_TOKEN:-}" ]]; then
+            echo "::error::环境里出现了 NODE_AUTH_TOKEN，会绕过 OIDC，请去掉这个 secret。"
+            exit 1
+          fi
+          if [[ -f "$HOME/.npmrc" ]] && grep -q '_authToken' "$HOME/.npmrc"; then
+            echo "::error::$HOME/.npmrc 里有 _authToken，会干扰 trusted publishing。"
+            exit 1
+          fi
+
+      - name: 解析并校验版本
+        id: ver
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          want="${INPUT_VERSION:-${RELEASE_TAG}}"
+          want="${want#v}"
+          have="$(node -p "require('./package.json').version")"
+          echo "tag/输入 = ${want:-<空>} / package.json = ${have}"
+          if [[ -z "$want" ]]; then
+            echo "::error::没拿到版本号：Release 的 tag 为空，或手动触发时没填 version。"
+            exit 1
+          fi
+          if [[ "$want" != "$have" ]]; then
+            echo "::error::版本不一致：要发 $want，package.json 是 $have。先改 package.json 再打 tag。"
+            exit 1
+          fi
+          echo "version=$have" >> "$GITHUB_OUTPUT"
+
+      - name: 已发布则跳过
+        id: check
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -euo pipefail
+          if npm view "${PACKAGE_NAME}@${VERSION}" version >/dev/null 2>&1; then
+            echo "::notice::${PACKAGE_NAME}@${VERSION} 已在 registry 上，跳过发布（幂等重跑）。"
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 跑测试
+        if: steps.check.outputs.exists == 'false'
+        run: node --test test/*.test.mjs
+
+      - name: 预检包内容
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          set -euo pipefail
+          npm pack --dry-run
+          npm pack --dry-run --json --loglevel=error > "$RUNNER_TEMP/pack.json"
+          node --input-type=module - "$RUNNER_TEMP/pack.json" <<'NODE'
+          import fs from 'node:fs'
+
+          const data = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'))
+          const report = Array.isArray(data) ? data[0] : Object.values(data)[0]
+          const files = report.files.map((f) => f.path)
+
+          // 截图共 1.6MB，只随仓库走、不进包；这条守住「包不被图片撑大」。
+          const stray = files.filter((f) => f.startsWith('assets/') && f !== 'assets/icon-180.png')
+          if (stray.length) {
+            console.error(`::error::包里混进了不该发布的 assets 文件：${stray.join(', ')}`)
+            process.exit(1)
+          }
+          const required = ['package.json', 'README.md', 'LICENSE', 'cordis.patch.yml', 'client.js', 'index.js']
+          const missing = required.filter((f) => !files.includes(f))
+          if (missing.length) {
+            console.error(`::error::包缺少必需文件：${missing.join(', ')}`)
+            process.exit(1)
+          }
+          console.log(`包内容校验通过：${files.length} 个文件，${report.size} 字节`)
+          NODE
+
+      - name: 发布到 npm（OIDC）
+        if: steps.check.outputs.exists == 'false'
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -euo pipefail
+          npm publish --access public --provenance
+          echo "::notice::已提交 ${PACKAGE_NAME}@${VERSION}"
+
+      # 上一轮手工发布踩过：packument 有约 3 分钟 CDN 延迟，
+      # dist-tags 端点先可见，直接 npm view 会误判失败。这里重试而不是立刻报错。
+      - name: 复核 registry
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 30); do
+            got="$(npm view "${PACKAGE_NAME}@${VERSION}" version 2>/dev/null || true)"
+            if [[ "$got" == "$VERSION" ]]; then
+              echo "::notice::registry 已可见 ${PACKAGE_NAME}@${VERSION}"
+              npm view "$PACKAGE_NAME" dist-tags --json || true
+              npm view "${PACKAGE_NAME}@${VERSION}" dist.attestations --json || \
+                echo "::warning::没查到 attestations；若发布成功但无 provenance，检查 id-token 权限。"
+              exit 0
+            fi
+            echo "第 ${i}/30 次：registry 还看不到 ${VERSION}，等 20 秒…"
+            sleep 20
+          done
+          echo "::error::等了 10 分钟 registry 仍看不到 ${VERSION}。发布本身可能已成功（CDN 延迟），去 npmjs.com 核对后再决定是否重跑。"
+          exit 1
+
+      - name: 汇总
+        if: always()
+        run: |
+          {
+            echo "### ${PACKAGE_NAME}@${{ steps.ver.outputs.version }}"
+            echo ""
+            echo "- 鉴权：OIDC trusted publishing（无长期 token，自动 provenance）"
+            echo "- 结果：${{ steps.check.outputs.exists == 'false' && '本次提交发布' || '已存在，跳过' }}"
+          } >> "$GITHUB_STEP_SUMMARY"
