@@ -1,4 +1,4 @@
-# SPEC — `@local/dsh-deepseek-search`
+# SPEC — `@sivancola/dsh-deepseek-search`
 
 A DeepSeek Harness bundle. Two halves:
 
@@ -313,7 +313,7 @@ Module-loader artifact, exactly this envelope:
 
 ```js
 window.__ModuleLoader__.load({
-  id: '@local/dsh-deepseek-search',
+  id: '@sivancola/dsh-deepseek-search',
   factory(require) {
     const React = require('react')
     const h = React.createElement

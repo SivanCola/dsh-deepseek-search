@@ -9,7 +9,7 @@
 # `config` block below; it is merged into the row's config as-is.
 - insert:
     - id: dsh-deepseek-search
-      name: '@local/dsh-deepseek-search'
+      name: '@sivancola/dsh-deepseek-search'
       # config:
       #   # Credential-ref name resolved through the Harness credential store.
       #   apiKeyEnv: DEEPSEEK_SEARCH_API_KEY

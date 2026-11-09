@@ -1,5 +1,5 @@
 /**
- * @local/dsh-deepseek-search — Client half (browser).
+ * @sivancola/dsh-deepseek-search — Client half (browser).
  *
  * Registers two Slot entries and one locale namespace:
  *   - main               : the full DeepSeek Search page (key `deepseek-search`)
@@ -15,7 +15,7 @@
  */
 
 window.__ModuleLoader__.load({
-  id: '@local/dsh-deepseek-search',
+  id: '@sivancola/dsh-deepseek-search',
   factory(require) {
     const React = require('react')
     const h = React.createElement

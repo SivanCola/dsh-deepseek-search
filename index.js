@@ -1,5 +1,5 @@
 /**
- * Host half of @local/dsh-deepseek-search.
+ * Host half of @sivancola/dsh-deepseek-search.
  *
  * Registers the model-facing `deepseek_search` tool for every agent/model and
  * the three POST routes the browser panel talks to:

@@ -1,7 +1,6 @@
 {
-  "name": "@local/dsh-deepseek-search",
+  "name": "@sivancola/dsh-deepseek-search",
   "version": "0.2.0",
-  "private": true,
   "description": "DeepSeek Search for DeepSeek Harness: a left-sidebar search panel plus a deepseek_search tool for every model, backed by the standalone DeepSeek Search API and its own API key.",
   "author": "SivanCola (https://github.com/SivanCola)",
   "license": "MIT",
@@ -23,6 +22,12 @@
   ],
   "type": "module",
   "icon": "icon.svg",
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "test": "node --test test/*.test.mjs"
   },

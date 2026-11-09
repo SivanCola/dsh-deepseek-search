@@ -1,4 +1,4 @@
-# DeepSeek 搜索 · `@local/dsh-deepseek-search`
+# DeepSeek 搜索 · `@sivancola/dsh-deepseek-search`
 
 一个带**左侧栏入口**的 DeepSeek Harness 插件：用**独立的 DeepSeek API Key** 调用
 [DeepSeek 官方 Search 接口](https://api-docs.deepseek.com/zh-cn/guides/search) 做网页搜索。
@@ -26,14 +26,14 @@ OpenAI 兼容 / 本地模型 …）完全无关。所以即使你用的是别的
 
 ```
 /Users/work/Desktop/code/dsh-deepseek-search          # 源码（link 方式安装，改完即生效）
-~/.dsh/profiles/desktop/package.json                  # dsh.profile.bundles 里多了 @local/dsh-deepseek-search
+~/.dsh/profiles/desktop/package.json                  # dsh.profile.bundles 里多了 @sivancola/dsh-deepseek-search
 ```
 
 重新安装 / 卸载：
 
 ```bash
 # 卸载后重装（改了 package.json 或 cordis.patch.yml 时需要）
-#   在 DSH 里：plugin_manager action=remove_bundle target=@local/dsh-deepseek-search
+#   在 DSH 里：plugin_manager action=remove_bundle target=@sivancola/dsh-deepseek-search
 #   然后：    plugin_manager action=install_bundle target=/Users/work/Desktop/code/dsh-deepseek-search
 ```
 
@@ -245,7 +245,7 @@ node --test test/*.test.mjs      # 28 passed（API 客户端 18 + 官方 Key 识
 
 ## 8. English summary
 
-`@local/dsh-deepseek-search` adds (a) a left-sidebar **DeepSeek Search** page and (b) a `deepseek_search`
+`@sivancola/dsh-deepseek-search` adds (a) a left-sidebar **DeepSeek Search** page and (b) a `deepseek_search`
 tool available to **every** model in the profile. Both use the DeepSeek Search API
 (`POST https://api.deepseek.com/v1/tools/search`) with the plugin's **own** API key, resolved per call
 from an inline config value, the Harness credential store (`DEEPSEEK_SEARCH_API_KEY`) or the environment —
