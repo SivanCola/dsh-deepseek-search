@@ -35,6 +35,18 @@ function isErrorCode(code) {
   return (error) => error instanceof DeepSeekSearchError && error.code === code
 }
 
+// 跑一个只靠 abort 才会 settle 的 Promise，并在此期间按住事件循环。
+// 不加这个，node 22 会在 AbortSignal.timeout 的 unref 定时器触发前就退出进程
+// （node 24+ 的 test runner 自己保活，所以本地看是全绿的）。
+async function withKeepAlive(run, predicate) {
+  const keepAlive = setTimeout(() => {}, 5000)
+  try {
+    await assert.rejects(run(), predicate)
+  } finally {
+    clearTimeout(keepAlive)
+  }
+}
+
 test('clampCount keeps an integer inside 1..50', () => {
   assert.equal(clampCount(undefined), 10)
   assert.equal(clampCount(null), 10)
@@ -376,7 +388,11 @@ test('searchDeepSeek reports a timeout as TIMEOUT', async () => {
       init.signal.addEventListener('abort', () => reject(new Error('aborted by timeout signal')), { once: true })
     })
 
-  await assert.rejects(searchDeepSeek(baseOptions({ fetchImpl, timeoutMs: 10 })), isErrorCode('TIMEOUT'))
+  // AbortSignal.timeout 内部的定时器是 unref 的，不会让事件循环保持存活。
+  // 这里唯一待决的 Promise 只会在 abort 时 settle，所以必须自己按住事件循环，
+  // 否则在 node 22 上进程会先一步退出（node 24+ 的 test runner 恰好自己保活，
+  // 曾把这个问题掩盖到 CI 上才暴露）。
+  await withKeepAlive(() => searchDeepSeek(baseOptions({ fetchImpl, timeoutMs: 10 })), isErrorCode('TIMEOUT'))
 })
 
 test('searchDeepSeek reports a caller abort as NETWORK_ERROR', async () => {
@@ -391,7 +407,7 @@ test('searchDeepSeek reports a caller abort as NETWORK_ERROR', async () => {
   )
   controller.abort()
 
-  await assert.rejects(pending, isErrorCode('NETWORK_ERROR'))
+  await withKeepAlive(() => pending, isErrorCode('NETWORK_ERROR'))
 })
 
 test('searchDeepSeek rejects malformed upstream payloads as BAD_RESPONSE', async () => {
