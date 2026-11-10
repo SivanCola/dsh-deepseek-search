@@ -48,7 +48,7 @@ OpenAI 兼容 / 本地模型 …）完全无关。所以即使你用的是别的
 plugin_manager action=install_bundle target=@sivancola/dsh-deepseek-search
 ```
 
-指定版本也可以：`target=@sivancola/dsh-deepseek-search@0.2.0`。
+指定版本也可以：`target=@sivancola/dsh-deepseek-search@0.3.0`。
 
 ### 或者从 GitHub 装
 
@@ -256,7 +256,8 @@ npm 校验「仓库 + workflow 文件名」后授予发布权。所以仓库里*
 
 ### 一次性准备（每个新包名都要做一次）
 
-包名必须先在 npm 上存在——trusted publisher 只能给已有包授权，不能创建包。0.2.0 已存在，满足。
+包名必须先在 npm 上存在——trusted publisher 只能给已有包授权，不能创建包。
+本包已有版本，0.3.0 就是首次通过 CI 发布、并带 provenance 的版本。
 
 ```bash
 npm trust github @sivancola/dsh-deepseek-search \
