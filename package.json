@@ -1,6 +1,6 @@
 {
   "name": "@sivancola/dsh-deepseek-search",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "DeepSeek Search for DeepSeek Harness: a left-sidebar search panel plus a deepseek_search tool for every model, backed by the standalone DeepSeek Search API and its own API key.",
   "author": "SivanCola (https://github.com/SivanCola)",
   "license": "MIT",
